@@ -57,6 +57,7 @@ log "local.properties: sdk.dir=$ANDROID_HOME"
 log "ant $CFG"
 ant -Dsdk.dir="$ANDROID_HOME" "$CFG" 2>&1 | tee "$LOG"
 rm -f bin/*-unaligned.apk
+rm -f bin/*-unaligned.apk
 APK=$(ls -1t "$ROOT"/bin/*-"$CFG".apk 2>/dev/null | head -n1 || true)
 [ -z "$APK" ] && die "no apk"
 log "APK: $APK"
