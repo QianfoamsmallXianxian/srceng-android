@@ -1,36 +1,54 @@
-name: Build android package
-
+name: build-apk
 on:
   push:
-    branches: [ con-wrappers ]
+    branches: [ main, con-wrappers ]
   pull_request:
-    branches: [ con-wrappers ]
-
+    branches: [ main, con-wrappers ]
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CFG: debug
     steps:
-    - uses: actions/checkout@v2
-    - name: Build
-      run: |
-        sudo apt-get update
-        sudo apt install -y make openjdk-8-jdk openjdk-8-jre ant-contrib python3-requests python3-pip
-        sudo pip3 install websocket-client
-        git clone --depth 1 https://gitlab.com/LostGamer/ndk-binaries
-        git clone --depth 1 https://gitlab.com/LostGamer/android-sdk
-        git clone --depth 1 https://github.com/nillerusr/srcsdk
-        cd srcsdk
-        git submodule init && git submodule update
-        cd ../
-        DEPLOY_BRANCH=srceng-old-port COMMIT=$(git rev-parse HEAD) scripts/workflow.sh
-
-    - name: Upload files
-      shell: bash
-      env:
-        DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
-        GH_TOKEN: ${{ secrets.API_GITHUB_TOKEN }}
-      run: |
-        DEPLOY_BRANCH=srceng-old-port scripts/upload-to-github.sh bin/srceng-debug.apk version
-        CHANNEL_ID=801092155090927626 python3 scripts/send-to-discord.py "Commits history: https://github.com/nillerusr/srceng-android/commits/con-wrappers\nBuild: https://github.com/nillerusr/srceng-deploy/\nBuild finished at: $(date +%Y-%m-%d-%H:%M)"
-
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: ccache-${{ runner.os }}-
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y make unzip ccache file openjdk-8-jdk ant ant-contrib python3-requests python3-pip
+          sudo pip3 install websocket-client
+      - run: |
+          git clone --depth 1 https://gitlab.com/LostGamer/ndk-binaries
+          git clone --depth 1 https://gitlab.com/LostGamer/android-sdk
+          git clone --depth 1 https://github.com/nillerusr/srcsdk
+          cd srcsdk && git submodule update --init --recursive --depth 1 && cd ..
+      - run: |
+          ls libs/armeabi-v7a | wc -l
+          ls ndk-binaries/toolchains/ | grep arm-linux
+          ls android-sdk/platforms/
+      - env:
+          DEPLOY_BRANCH: ci
+          COMMIT: ${{ github.sha }}
+        run: bash scripts/workflow.sh
+      - run: |
+          APK=$(ls -1t bin/*.apk | head -n1)
+          COUNT=$(unzip -l "$APK" | awk '/lib\/.+\.so$/ {print $4}' | wc -l)
+          echo "libs: $COUNT"
+          [ "$COUNT" -ge 30 ] || exit 1
+          unzip -l "$APK" | awk '/lib\/.+\.so$/ {print $4}' | grep -q '^lib/armeabi-v7a/' || exit 1
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: srceng-apk-${{ github.run_number }}
+          path: |
+            bin/*.apk
+            build-*.log
+          if-no-files-found: warn

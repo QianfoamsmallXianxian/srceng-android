@@ -1,39 +1,57 @@
 #!/bin/bash
-
-export NDK_HOME=$(pwd)/ndk-binaries PATH=$PATH:$(pwd)/ndk-binaries LIBPATH=$(pwd)/libs/armeabi-v7a NDK_TOOLCHAIN_VERSION=4.9
-
-build()
-{
-	PW=$(pwd)
-	cd $1
-	make NDK=1 NDK_PATH=$NDK_HOME APP_API_LEVEL=19 CFG=debug NDK_VERBOSE=1 -j$(nproc --all) || exit 1
-	cp $2 $LIBPATH && echo $2 Installed || exit 1
-	cd $PW
+set -euo pipefail
+trap 'echo "[FATAL] line $LINENO (exit $?)" >&2' ERR
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd); cd "$ROOT"
+: "${COMMIT:=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
+: "${DEPLOY_BRANCH:=local}"
+: "${CFG:=debug}"
+: "${JOBS:=$(nproc 2>/dev/null || echo 4)}"
+: "${NDK_HOME:=$ROOT/ndk-binaries}"
+: "${ANDROID_HOME:=$ROOT/android-sdk}"
+: "${JAVA_HOME:=/usr/lib/jvm/java-8-openjdk-amd64}"
+ABI=armeabi-v7a
+API=19
+LIBPATH="$ROOT/libs/$ABI"
+LOG="$ROOT/build-$CFG.log"
+mkdir -p "$LIBPATH" "$HOME/.android" "$ROOT/bin"
+export NDK_HOME ANDROID_HOME JAVA_HOME APP_ABI="$ABI"
+export PATH="$NDK_HOME:$JAVA_HOME/bin:$PATH"
+command -v ccache >/dev/null && export NDK_CCACHE=ccache
+log(){ printf '\n[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
+die(){ printf '[FAIL] %s\n' "$*" >&2; exit 1; }
+check_elf(){ file -b "$1" | grep -q 'ARM' || die "not ARM: $1"; echo "ok $(basename "$1")"; }
+build(){
+  local dir=$1 out=$2 start=$SECONDS
+  [ -d "$dir" ] || { log "skip $dir"; return 0; }
+  log "build $dir -> $out"
+  ( cd "$dir" && make -j"$JOBS" NDK=1 NDK_PATH="$NDK_HOME" APP_ABI="$ABI" APP_PLATFORM="android-$API" APP_API_LEVEL="$API" CFG="$CFG" NDK_VERBOSE=1 ) 2>&1 | tail -40
+  [ -f "$dir/$out" ] || { echo "[skip] $dir/$out"; return 1; }
+  install -Dm644 "$dir/$out" "$LIBPATH/$out"
+  check_elf "$LIBPATH/$out"
+  log "ok ($(( SECONDS - start ))s)"
 }
-
-RES=res/values/build_info.xml
-generate_resources()
-{
-	echo '<?xml version="1.0" encoding="utf-8"?>' > $RES
-	echo '<resources>' >> $RES
-	echo '<string name="last_commit">'$COMMIT'</string>' >> $RES
-	echo '<string name="deploy_branch">'$DEPLOY_BRANCH'</string>' >> $RES
-	echo '</resources>' >> $RES
+gen_res(){
+  cat > res/values/build_info.xml <<XML
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="last_commit">$COMMIT</string>
+    <string name="deploy_branch">$DEPLOY_BRANCH</string>
+</resources>
+XML
+  echo -n "$COMMIT" > "$ROOT/version"
 }
-
-build jni/src/tierhook libtierhook.so
-
-cd srcsdk/
-build main libmain.so
-build gl4es libRegal.so
+cd srcsdk
+build main                      libmain.so
+build gl4es                     libRegal.so
 build vinterface_wrapper/client libclient.so
 build vinterface_wrapper/server libserver.so
-cd ../
-
-generate_resources
-
-mkdir $HOME/.android
-cp debug.keystore $HOME/.android
-JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64/ ANDROID_HOME=android-sdk/ ant debug || exit 1
-
-echo -n $COMMIT > version
+cd "$ROOT"
+build jni/src/tierhook libtierhook.so
+gen_res
+install -Dm600 "$ROOT/debug.keystore" "$HOME/.android/debug.keystore"
+log "ant $CFG"
+ant "$CFG" 2>&1 | tee "$LOG"
+APK=$(ls -1t "$ROOT"/bin/*-"$CFG".apk 2>/dev/null | head -n1 || true)
+[ -z "$APK" ] && die "no apk"
+log "APK: $APK"
+ls -lh "$APK"

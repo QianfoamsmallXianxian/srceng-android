@@ -1,3 +1,13 @@
 gen/
 bin/
 *.o
+android-ndk-r16b/
+android-sdk/
+ndk-binaries/
+srcsdk/
+ndk-r16b.zip
+*.zip
+bin/
+gen/
+build-*.log
+version
