@@ -14,7 +14,7 @@ API=19
 LIBPATH="$ROOT/libs/$ABI"
 LOG="$ROOT/build-$CFG.log"
 mkdir -p "$LIBPATH" "$HOME/.android" "$ROOT/bin"
-export NDK_HOME ANDROID_HOME JAVA_HOME APP_ABI="$ABI"
+export NDK_HOME ANDROID_HOME ANDROID_SDK_ROOT="$ANDROID_HOME" JAVA_HOME APP_ABI="$ABI"
 export PATH="$NDK_HOME:$JAVA_HOME/bin:$PATH"
 command -v ccache >/dev/null && export NDK_CCACHE=ccache
 log(){ printf '\n[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
@@ -49,8 +49,13 @@ cd "$ROOT"
 build jni/src/tierhook libtierhook.so
 gen_res
 install -Dm600 "$ROOT/debug.keystore" "$HOME/.android/debug.keystore"
+[ -f "$ANDROID_HOME/tools/ant/build.xml" ] || die "missing $ANDROID_HOME/tools/ant/build.xml"
+cat > "$ROOT/local.properties" <<LP
+sdk.dir=$ANDROID_HOME
+LP
+log "local.properties: sdk.dir=$ANDROID_HOME"
 log "ant $CFG"
-ant "$CFG" 2>&1 | tee "$LOG"
+ant -Dsdk.dir="$ANDROID_HOME" "$CFG" 2>&1 | tee "$LOG"
 APK=$(ls -1t "$ROOT"/bin/*-"$CFG".apk 2>/dev/null | head -n1 || true)
 [ -z "$APK" ] && die "no apk"
 log "APK: $APK"

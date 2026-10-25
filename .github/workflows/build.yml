@@ -30,10 +30,14 @@ jobs:
           git clone --depth 1 https://gitlab.com/LostGamer/android-sdk
           git clone --depth 1 https://github.com/nillerusr/srcsdk
           cd srcsdk && git submodule update --init --recursive --depth 1 && cd ..
-      - run: |
-          ls libs/armeabi-v7a | wc -l
+      - name: verify env
+        run: |
+          echo "libs=$(ls libs/armeabi-v7a | wc -l)"
           ls ndk-binaries/toolchains/ | grep arm-linux
           ls android-sdk/platforms/
+          echo "--- tools/ant ---"
+          ls android-sdk/tools/ant/ 2>/dev/null || echo "NO tools/ant"
+          test -f android-sdk/tools/ant/build.xml && echo "OK tools/ant/build.xml" || { echo "MISSING tools/ant/build.xml"; exit 1; }
       - env:
           DEPLOY_BRANCH: ci
           COMMIT: ${{ github.sha }}
