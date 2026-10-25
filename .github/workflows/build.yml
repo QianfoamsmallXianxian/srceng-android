@@ -22,8 +22,9 @@ jobs:
           key: ccache-${{ runner.os }}-${{ github.sha }}
           restore-keys: ccache-${{ runner.os }}-
       - run: |
+          sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y make unzip ccache file openjdk-8-jdk ant ant-contrib python3-requests python3-pip
+          sudo apt-get install -y make unzip ccache file openjdk-8-jdk ant ant-contrib python3-requests python3-pip zlib1g:i386 libc6:i386 libstdc++6:i386
           sudo pip3 install websocket-client
       - run: |
           git clone --depth 1 https://gitlab.com/LostGamer/ndk-binaries
