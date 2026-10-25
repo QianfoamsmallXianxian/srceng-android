@@ -29,6 +29,7 @@ jobs:
       - run: |
           git clone --depth 1 https://gitlab.com/LostGamer/ndk-binaries
           git clone --depth 1 https://gitlab.com/LostGamer/android-sdk
+          cp -r android-sdk/platforms/android-29 android-sdk/platforms/android-36
           git clone --depth 1 https://github.com/nillerusr/srcsdk
           cd srcsdk && git submodule update --init --recursive --depth 1 && cd ..
       - name: verify env
